@@ -1,0 +1,399 @@
+name: Generate shadowrocket rules
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Создание папок ---
+      - name: Создаем папки для артефактов
+        run: |
+          mkdir -p rules scripts modules conf
+
+      - name: Генерируем список voice с DST-PORT
+        run: |
+          {
+            echo "# WhatsApp/Telegram/FaceTime — Голос"
+            echo "# https://faq.whatsapp.com/490531153094849/?cms_platform=iphone&helpref=platform_switcher"
+            echo "# https://www.netify.ai/resources/protocols/telegram"
+            echo "# https://www.netify.ai/resources/applications/whatsapp"
+            echo "DST-PORT,3478,PROXY"
+            echo "DST-PORT,3480,PROXY"
+            echo "DST-PORT,3484,PROXY"
+            echo "# WhatsApp — Видео"
+            echo "# https://developers.facebook.com/docs/whatsapp/guides/network-requirements/"
+            echo "DST-PORT,5222,PROXY"
+            echo "# Telegram — Голос и видео (RTP / P2P)"
+            echo "DST-PORT,596-599,PROXY"
+            echo "# DST-PORT,50000-59999,PROXY"
+            echo "# TCP порт для сигнальных звонков Telegram"
+            echo "DST-PORT,1400,PROXY"
+            echo "# Google Meet"
+            echo "# https://support.google.com/a/answer/1279090?hl=en#zippy=%2Cavoid-using-vpns%2Cavoid-using-qos%2Cavoid-using-proxies%2Cusing-vdi%2Cusing-wi-fi%2Cconfiguring-default-video-quality%2Cstep-review-bandwidth-requirements%2Cstep-allow-access-to-google-ip-address-ranges-for-audio-and-video%2Cstep-allow-access-to-uniform-resource-identifiers-uris%2Cstep-set-up-outbound-ports-for-media-traffic"
+            echo "DST-PORT,19302​–19309,PROXY"
+            
+          } > rules/voice_ports.list
+      - name: Генерируем domains_geo_detect.list
+        run: |
+          curl -s https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ip-geo-detect.list \
+            | tr -d '\r' \
+            | grep -v '^#' \
+            | grep -v '^$' \
+            | sed -E 's/^\+\.//' \
+            | sed -E 's/^\.//' \
+            | grep -v '\.ru$' \
+            | sed 's/^/DOMAIN-SUFFIX,/' \
+            | sort -u > temp_geo_detect.txt
+          {
+            echo "# NAME: domains_geo_detect.list"
+            echo "# AUTHOR: misha-tgshv"
+            echo "# REPO: https://github.com/misha-tgshv/shadowrocket-configuration-file"
+            echo "# UPDATED: $(TZ='Europe/Moscow' date '+%Y-%m-%d %H:%M:%S') MSK"
+            echo "# SOURCE: https://github.com/MetaCubeX/meta-rules-dat/blob/meta/geo/geosite/category-ip-geo-detect.list"
+            echo "# Количество доменов: $(wc -l < temp_geo_detect.txt)"
+            cat temp_geo_detect.txt
+          } > rules/domains_geo_detect.list
+          rm temp_geo_detect.txt
+
+      - name: Получаем только IP-адреса из доменов
+        run: |
+          curl -s https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/refs/heads/main/source/domains.list > temp_domains.txt
+          > rules/domain_ips.list
+          while read domain; do
+            [ -z "$domain" ] && continue
+            [[ $domain =~ ^# ]] && continue
+            ip=$(dig +short "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+            if [ -n "$ip" ]; then
+              echo "$ip" >> rules/domain_ips.list
+            fi
+          done < temp_domains.txt
+          rm temp_domains.txt
+
+      # --- Генерация файлов --- 
+      - name: Генерируем domains_community.list
+        run: |
+          curl -s https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/main/source/community.list | \
+          tr -d '\r' | \
+          awk '
+            BEGIN {
+              print "# NAME: domains_community.list";
+              print "# AUTHOR: misha-tgshv";
+              print "# REPO: https://github.com/misha-tgshv/shadowrocket-configuration-file";
+              print "# UPDATED: " strftime("%Y-%m-%d %H:%M:%S", systime(), 1) " MSK";
+              print "# SOURCE: https://github.com/misha-tgshv/shadowrocket-configuration-file/blob/main/community.list";
+              before_youtube=1
+            }
+            /^#/ {
+              print;
+              if ($0 == "# youtube") { before_youtube=0 }
+              next
+            }
+            NF == 0 { next }
+            {
+              if (before_youtube) {
+                print "DOMAIN-KEYWORD," $0
+              } else {
+                print "DOMAIN-SUFFIX," $0
+              }
+            }
+          ' > rules/domains_community.list
+
+      - name: Генерируем domains_antifilter.list
+        run: |
+          curl -sSL https://community.antifilter.download/list/domains.lst \
+            | sed -E 's/^\+\./DOMAIN-SUFFIX,/; s/^[^D]/DOMAIN-SUFFIX,&/' \
+            | sed '/www|spotify.com/d' \
+            | awk '!seen[$0]++' > temp_list.txt
+          echo "# Количество доменов: $(wc -l < temp_list.txt)" > rules/domains_antifilter.list
+          cat temp_list.txt >> rules/domains_antifilter.list
+          rm temp_list.txt
+
+      - name: Генерируем ips_antifilter.list
+        run: |
+          curl -s https://community.antifilter.download/list/community.lst \
+            | sed 's/^/IP-CIDR,/g' \
+            | sort -u > temp_aips.txt
+          echo "# Количество IP-адресов: $(wc -l < temp_aips.txt)" > rules/ips_antifilter.list
+          cat temp_aips.txt >> rules/ips_antifilter.list
+          rm temp_aips.txt
+
+      - name: Генерируем domains_refilter.list
+        run: |
+          curl -s https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/community.lst > temp.txt
+          curl -s https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/domains_all.lst >> temp.txt
+          grep -v "mega555" temp.txt > temp2.txt
+          grep -v "spotify.com" temp2.txt > temp3.txt
+          rm temp.txt temp2.txt
+          echo "# NAME: domains_refilter.list" > rules/domains_refilter.list
+          echo "# AUTHOR: misha-tgshv" >> rules/domains_refilter.list
+          echo "# REPO: https://github.com/misha-tgshv/shadowrocket-configuration-file" >> rules/domains_refilter.list
+          echo "# UPDATED: $(TZ='Europe/Moscow' date '+%Y-%m-%d %H:%M:%S')" MSK >> rules/domains_refilter.list
+          echo "# SOURCE: https://github.com/1andrevich/Re-filter-lists" >> rules/domains_refilter.list
+          sed 's/^/DOMAIN-SUFFIX,/g' temp3.txt | tee domaintmp
+          wc -l < domaintmp | awk '{print "# TOTAL:", $1}' >> rules/domains_refilter.list
+          cat domaintmp >> rules/domains_refilter.list
+          rm domaintmp temp3.txt
+
+      - name: Генерируем ips_refilter.list
+        run: |
+          curl -s https://raw.githubusercontent.com/1andrevich/Re-filter-lists/refs/heads/main/community_ips.lst > ips1.txt
+          curl -s https://raw.githubusercontent.com/1andrevich/Re-filter-lists/refs/heads/main/discord_ips.lst >> ips1.txt
+          curl -s https://raw.githubusercontent.com/1andrevich/Re-filter-lists/refs/heads/main/ipsum.lst >> ips1.txt
+          sed 's/^/IP-CIDR,/g' ips1.txt | sort -u > temp_ips.list
+          echo "# Количество IP-адресов: $(wc -l < temp_ips.list)" > rules/ips_refilter.list
+          cat temp_ips.list >> rules/ips_refilter.list
+          rm ips1.txt temp_ips.list
+
+      - name: Генерируем domains_banking.list
+        run: |
+          curl -s https://www.cbr.ru/banking_sector/credit/cowebsites/ | \
+          grep -oP 'href="\K[^"]+' | \
+          grep '^http' | \
+          sed -E '/(t\.me|vk\.com|ok\.ru|telegram|dzen|twitter|youtube|zen\.yandex\.ru|rutube\.ru|linkedin)/d' | \
+          sed 's/^https\?:\/\///' | \
+          sed 's/\/.*//' | \
+          sort -u | sed 's/^/DOMAIN-SUFFIX,/' > rules/domains_banking.list
+
+      # --- Генерация скриптов ---
+      - name: Генерируем rewrite.youtube.response.preview.js
+        run: |
+          curl -sSL "https://raw.githubusercontent.com/Maasea/sgmodule/refs/heads/master/Script/Youtube/youtube.response.js" > temp.txt
+          sed 's/;e!/;e/g' temp.txt > scripts/rewrite.youtube.response.preview.js
+          rm temp.txt
+
+      # --- Генерация модулей ---
+      - name: Получаем даты последних изменений
+        run: |
+          YT_MODULE_DATE=$(curl -s "https://api.github.com/repos/YanbingJiang/Shadowrocket_diy_rules/commits?path=Modules/YT-Premium-V1.module&page=1&per_page=1" | jq -r '.[0].commit.committer.date' | cut -d'T' -f1)
+          YT_SCRIPT_DATE=$(curl -s "https://api.github.com/repos/Maasea/sgmodule/commits?path=Script/Youtube/youtube.response.js&page=1&per_page=1" | jq -r '.[0].commit.committer.date' | cut -d'T' -f1)
+          echo "YT_MODULE_DATE=$YT_MODULE_DATE" >> $GITHUB_ENV
+          echo "YT_SCRIPT_DATE=$YT_SCRIPT_DATE" >> $GITHUB_ENV
+
+      - name: Генерируем YT-Premium-V1-RU.module
+        run: |
+          curl -sSL https://raw.githubusercontent.com/YanbingJiang/Shadowrocket_diy_rules/refs/heads/main/Modules/YT-Premium-V1.module \
+            | sed -E 's/captionLang:zh-Hans/captionLang:off/g; s/lyricLang:zh-Hans/lyricLang:off/g' \
+            | sed "1i# Last modified youtube.response.js: ${{ env.YT_SCRIPT_DATE }}" \
+            | sed "1i# Last modified YT-Premium-V1: ${{ env.YT_MODULE_DATE }}" > modules/YT-Premium-V1-RU.module
+
+      - name: Генерируем Certificate.module
+        run: |
+          mkdir -p modules
+          cat > modules/Certificate.module << 'EOF'
+          #!name=Certificate Module
+          [MITM]
+          enable=true
+          ca-passphrase=${CA_PASSPHRASE}
+          ca-p12=${CA_P12}
+          EOF
+        env:
+          CA_PASSPHRASE: ${{ secrets.CA_PASSPHRASE }}
+          CA_P12: ${{ secrets.CA_P12 }}
+
+
+      # --- Генерация конфигов ---
+      - name: Создаем sr_ru_basic.conf с заменой update-url в копии general
+        run: |
+          CONFNAME="sr_ru_basic.conf"
+          cp source/General.txt conf/General.tmp
+          sed -i "s|^update-url =.*|update-url = https://cdn.jsdelivr.net/gh/misha-tgshv/shadowrocket-configuration-file@main/conf/${CONFNAME}|" conf/General.tmp
+
+          {
+            cat conf/General.tmp
+            echo "# Выборочные правила маршрутизации"
+            echo "[Rule]"
+            echo "RULE-SET,https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/main/rules/domains_community.list,PROXY"
+            echo "RULE-SET,https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/refs/heads/main/rules/domain_ips.list,PROXY,no-resolve"
+            # echo "RULE-SET,https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/main/rules/voice_ports.list,PROXY"
+            echo "RULE-SET,https://raw.githubusercontent.com/HybridNetworks/whatsapp-cidr/refs/heads/main/WhatsApp/whatsapp_cidr_ipv4.list,PROXY,no-resolve"
+            echo "RULE-SET,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Shadowrocket/Telegram/Telegram.list,PROXY"
+            echo "RULE-SET,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Shadowrocket/Discord/Discord.list,PROXY"
+            echo "RULE-SET,https://github.com/toneywhitez/zkeen_rules/releases/latest/download/telegram_ips.list,PROXY,no-resolve"
+            echo "RULE-SET,https://github.com/toneywhitez/zkeen_rules/releases/latest/download/meta_ips.list,PROXY,no-resolve"
+            echo "FINAL,DIRECT"
+          } > conf/${CONFNAME}
+
+          sed -i "1s/^/# @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\n/" conf/${CONFNAME}
+          rm conf/General.tmp
+
+      - name: Создаем sr_ru_whitelist.conf с заменой update-url в копии general
+        run: |
+            CONFNAME="sr_ru_whitelist.conf"
+            cp source/General.txt conf/General.tmp
+            sed -i "s|^update-url =.*|update-url = https://cdn.jsdelivr.net/gh/misha-tgshv/shadowrocket-configuration-file@main/conf/${CONFNAME}|" conf/General.tmp
+            sed -i 's|^dns-server =.*|dns-server = system|' conf/General.tmp
+
+            {
+              cat conf/General.tmp
+              echo "# Выборочные правила маршрутизации"
+              echo "[Rule]"
+              echo "RULE-SET,https://github.com/hydraponique/roscomvpn-geoip/raw/refs/heads/master/release/text/whitelist.txt,DIRECT"
+              echo "RULE-SET,https://github.com/hxehex/russia-mobile-internet-whitelist/blob/main/whitelist.txt,DIRECT"
+              echo "FINAL,PROXY"
+            } > conf/${CONFNAME}
+    
+            sed -i "1s/^/# @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\n/" conf/${CONFNAME}
+            rm conf/General.tmp
+
+      - name: Создаем sr_ru_keen.conf с заменой update-url в копии general
+        run: |
+          CONFNAME="sr_ru_keen.conf"
+          cp source/General.txt conf/General.tmp
+          sed -i "s|^update-url =.*|update-url = https://cdn.jsdelivr.net/gh/misha-tgshv/shadowrocket-configuration-file@main/conf/${CONFNAME}|" conf/General.tmp
+
+          {
+            cat conf/General.tmp
+            echo "# Выборочные правила маршрутизации"
+            echo "[Rule]"
+            echo "RULE-SET,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Shadowrocket/YouTube/YouTube.list,PROXY"
+            echo "RULE-SET,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Shadowrocket/Instagram/Instagram.list,PROXY"
+            echo "RULE-SET,https://raw/.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Shadowrocket/Facebook/Facebook.list,PROXY"
+            echo "RULE-SET,https://raw.githubusercontent.com/HybridNetworks/whatsapp-cidr/refs/heads/main/WhatsApp/whatsapp_cidr_ipv4.list,PROXY,no-resolve"
+            echo "RULE-SET,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Shadowrocket/Telegram/Telegram.list,PROXY"
+            echo "RULE-SET,https://github.com/toneywhitez/zkeen_rules/releases/latest/download/telegram_ips.list,PROXY,no-resolve"
+            echo "RULE-SET,https://github.com/toneywhitez/zkeen_rules/releases/latest/download/meta_ips.list,PROXY,no-resolve"
+            echo "FINAL,DIRECT"
+          } > conf/${CONFNAME}
+
+          sed -i "1s/^/# @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\n/" conf/${CONFNAME}
+          rm conf/General.tmp
+
+      - name: Создаем sr_nonru_basic.conf с заменой update-url
+        run: |
+          CONFNAME="sr_nonru_basic.conf"
+          cp source/General.txt conf/General.tmp
+          sed -i "s|^update-url =.*|update-url = https://cdn.jsdelivr.net/gh/misha-tgshv/shadowrocket-configuration-file@main/conf/${CONFNAME}|" conf/General.tmp
+          
+          {
+            cat conf/General.tmp
+            echo "# Выборочные правила маршрутизации"
+            echo "[Rule]"
+            echo "DOMAIN-SUFFIX,ru,PROXY"
+            echo "DOMAIN-SUFFIX,su,PROXY"
+            echo "DOMAIN-SUFFIX,рф,PROXY"
+            echo "DOMAIN-KEYWORD,.ru,PROXY"
+            echo "DOMAIN-KEYWORD,.su,PROXY"
+            echo "DOMAIN-KEYWORD,.рф,PROXY"
+            echo "FINAL,DIRECT"
+          } > conf/${CONFNAME}
+
+          # Вставляем .ru в строку skip-proxy в conf/${CONFNAME}
+          sed -i '/^skip-proxy/ s/$/,*.ru/' conf/${CONFNAME}
+
+          sed -i "1s/^/# @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\n/" conf/${CONFNAME}
+          rm conf/General.tmp
+
+      - name: Создаем sr_ru_mini.conf с заменой update-url и проксированием портов и telegram
+        run: |
+          CONFNAME="sr_ru_mini.conf"
+          cp source/General.txt conf/General.tmp
+          sed -i "s|^update-url =.*|update-url = https://cdn.jsdelivr.net/gh/misha-tgshv/shadowrocket-configuration-file@main/conf/${CONFNAME}|" conf/General.tmp
+          {
+            cat conf/General.tmp
+            echo "# Выборочные правила маршрутизации"
+            echo "[Rule]"
+            # Проксирование портов голосовой связи
+            echo "RULE-SET,https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/main/rules/voice_ports.list,PROXY"
+            # Отдельное проксирование для telegram (ключевое слово)
+            echo "DOMAIN-KEYWORD,telegram,PROXY"
+            # Генерация доменов из community.list
+            curl -s https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/main/source/community.list | \
+            awk '
+              BEGIN { before_youtube=1 }
+              /^#/ {
+                if ($0 == "# youtube") before_youtube=0
+                next
+              }
+              NF == 0 { next }
+              {
+                if (before_youtube) {
+                  print "DOMAIN-KEYWORD," $1 ",PROXY"
+                } else {
+                  print "DOMAIN-SUFFIX," $1 ",PROXY"
+                }
+              }
+            '
+            echo "FINAL,DIRECT"
+          } > conf/${CONFNAME}
+          sed -i "1s/^/# mini conf, @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\\n/" conf/${CONFNAME}
+          sed -i '1G' conf/${CONFNAME}
+          rm conf/General.tmp
+
+      - name: Создаем sr_ru_extended.conf без update-url и с пустыми строками после [Rule]
+        run: |
+          CONFNAME="sr_ru_extended.conf"
+          cp source/General.txt conf/General.tmp
+          
+          # Удаляем строку update-url, если она там есть
+          sed -i '/^update-url =/d' conf/General.tmp
+
+          # Закомментируем строку include = sr_ru_extended.conf
+          sed -i 's|^\(include = sr_ru_extended.conf\)|# \1|' conf/General.tmp
+      
+          {
+            cat conf/General.tmp
+            echo "# Собственные правила маршрутизации"
+            echo "[Rule]"
+            echo ""
+            echo ""
+            echo ""
+          } > conf/${CONFNAME}
+      
+          sed -i "1s/^/# @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\n/" conf/${CONFNAME}
+      
+          rm conf/General.tmp
+
+      - name: Создаем sr_ru_geo.conf
+        run: |
+          CONFNAME="sr_ru_geo.conf"
+          cp source/General.txt conf/General.tmp
+          sed -i "s|^update-url =.*|update-url = https://cdn.jsdelivr.net/gh/misha-tgshv/shadowrocket-configuration-file@main/conf/${CONFNAME}|" conf/General.tmp
+    
+          {
+            cat conf/General.tmp
+            echo "# Отправляем все сайты в ГЕО напрямую, а остальное в прокси"
+            echo "[Rule]"
+            echo "GEOIP,RU,DIRECT"
+            echo "RULE-SET,https://raw.githubusercontent.com/misha-tgshv/shadowrocket-configuration-file/refs/heads/main/rules/domains_geo_detect.list,DIRECT"
+            echo "# DOMAIN-SUFFIX,ru,DIRECT"
+            echo "# DOMAIN-SUFFIX,рф,DIRECT"
+            echo "# DOMAIN-SUFFIX,su,DIRECT"
+            echo ""
+            echo "# Final"
+            echo "FINAL,PROXY"
+          } > conf/${CONFNAME}
+
+          # Вставляем .ru в строку skip-proxy в conf/${CONFNAME}
+          sed -i '/^skip-proxy/ s/$/,*.ru,*.su,*.рф/' conf/${CONFNAME}
+          
+          sed -i "1s/^/# @misha-tgshv, built on $(TZ=\"Asia/Novokuznetsk\" date)\n/" conf/${CONFNAME}
+          rm conf/General.tmp
+
+      # --- Коммитим и пушим ---
+      - name: Настраиваем git
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Добавляем и коммитим новые файлы
+        run: |
+          git add rules scripts modules conf
+          git commit -m "Auto: обновление сгенерированных файлов [skip ci]" || echo "No changes to commit"
+
+      - name: Пушим изменения в main
+        run: git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
