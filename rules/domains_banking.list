@@ -241,7 +241,6 @@ DOMAIN-SUFFIX,doncombank.ru
 DOMAIN-SUFFIX,donkombank.ru
 DOMAIN-SUFFIX,donteksbank.ru
 DOMAIN-SUFFIX,dp.sngb.ru
-DOMAIN-SUFFIX,dsrnko.ru
 DOMAIN-SUFFIX,dtb1.ru
 DOMAIN-SUFFIX,earco.ru
 DOMAIN-SUFFIX,ebs.snbank.ru
@@ -269,6 +268,7 @@ DOMAIN-SUFFIX,festival.gift-cards.ru
 DOMAIN-SUFFIX,fifa.alfabank.ru
 DOMAIN-SUFFIX,file.rshb.ru
 DOMAIN-SUFFIX,filebox-test.alfabank.ru
+DOMAIN-SUFFIX,fin-state.ru
 DOMAIN-SUFFIX,finance.ozon.ru
 DOMAIN-SUFFIX,finbank.ru
 DOMAIN-SUFFIX,finpilot.su
@@ -606,6 +606,7 @@ DOMAIN-SUFFIX,portal-da.ru
 DOMAIN-SUFFIX,portal.bank-hlynov.ru
 DOMAIN-SUFFIX,pos.rsb.ru
 DOMAIN-SUFFIX,postcard.alfabank.ru
+DOMAIN-SUFFIX,pr-pay.ru
 DOMAIN-SUFFIX,priovtb.com
 DOMAIN-SUFFIX,private-banking.rshb.ru
 DOMAIN-SUFFIX,private.mkb.ru
@@ -645,6 +646,7 @@ DOMAIN-SUFFIX,res.pervbank.ru
 DOMAIN-SUFFIX,research.alfabank.ru
 DOMAIN-SUFFIX,research.gazprombank.ru
 DOMAIN-SUFFIX,resocreditbank.ru
+DOMAIN-SUFFIX,resortbank.ru
 DOMAIN-SUFFIX,retail.etf-int.ru
 DOMAIN-SUFFIX,retail.rshb.ru
 DOMAIN-SUFFIX,rio.gift-cards.ru
@@ -658,6 +660,7 @@ DOMAIN-SUFFIX,rko.energotransbank.com
 DOMAIN-SUFFIX,rko.norvik.ru
 DOMAIN-SUFFIX,rncoluminis.ru
 DOMAIN-SUFFIX,rnko.ru
+DOMAIN-SUFFIX,rnko.vkpay.ru
 DOMAIN-SUFFIX,roscap.com
 DOMAIN-SUFFIX,roscap.ru
 DOMAIN-SUFFIX,royalpark.gift-cards.ru
@@ -684,6 +687,7 @@ DOMAIN-SUFFIX,sberclickstream.ru
 DOMAIN-SUFFIX,sberindex.ru
 DOMAIN-SUFFIX,sberminor.ru
 DOMAIN-SUFFIX,sberprime.sber.ru
+DOMAIN-SUFFIX,sbersova.ru
 DOMAIN-SUFFIX,sbertv.ru
 DOMAIN-SUFFIX,sbionline.ru
 DOMAIN-SUFFIX,sbnk.ru
@@ -923,6 +927,7 @@ DOMAIN-SUFFIX,www.coalmetbank.ru
 DOMAIN-SUFFIX,www.coins.altbank.com
 DOMAIN-SUFFIX,www.comfortcredit.ru
 DOMAIN-SUFFIX,www.commerzbank.ru
+DOMAIN-SUFFIX,www.compasrnko.ru
 DOMAIN-SUFFIX,www.cosmos-bank.ru
 DOMAIN-SUFFIX,www.creditural.ru
 DOMAIN-SUFFIX,www.crocusbank.ru
@@ -1051,6 +1056,7 @@ DOMAIN-SUFFIX,www.otpbank.ru
 DOMAIN-SUFFIX,www.payanyway.ru
 DOMAIN-SUFFIX,www.poidem.ru
 DOMAIN-SUFFIX,www.pokupay.ru
+DOMAIN-SUFFIX,www.pr-pay.ru
 DOMAIN-SUFFIX,www.primbank.ru
 DOMAIN-SUFFIX,www.priobye.ru
 DOMAIN-SUFFIX,www.priovtb.com
@@ -1102,6 +1108,7 @@ DOMAIN-SUFFIX,www.sberbank.ru
 DOMAIN-SUFFIX,www.sberbank1.ru
 DOMAIN-SUFFIX,www.sberbankaktivno.ru
 DOMAIN-SUFFIX,www.sberindex.ru
+DOMAIN-SUFFIX,www.sbersova.ru
 DOMAIN-SUFFIX,www.sbertv.ru
 DOMAIN-SUFFIX,www.sbnk.ru
 DOMAIN-SUFFIX,www.sbpgpb.ru
